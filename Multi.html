@@ -1,0 +1,1009 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8" />
+  <title>Sphere Mística Multiusuário (Demo)</title>
+  <meta name="viewport" content="width=100vw,initial-scale=1"/>
+  <style>
+    html,body {margin:0;padding:0;overflow:hidden;width:100vw;height:100vh;font-family: 'Segoe UI', Arial, sans-serif;background:#10131a;}
+    #game-container {position:absolute;top:0;left:0;width:100vw;height:100vh;z-index:0;}
+    #ui {position:absolute;width:100vw;height:100vh;pointer-events:none;z-index:10;}
+    #chat {position:absolute;left:20px;bottom:40px;width:320px;background:rgba(25,28,32, 0.94);border-radius:12px;box-shadow:0 2px 12px #0007;transition:0.2s;pointer-events:auto;}
+    #messages {max-height:190px;overflow-y:auto;padding:12px;color:#f7eafc;font-size:1em;min-height:30px;}
+    #messages div {margin-bottom:6px;}
+    #chat-form {display:flex;border-top:1px solid #333a;}
+    #chat-input {flex:1;background:none;border:none;color:#fff;padding:10px;font-size:1em;outline:none;}
+    #chat-form button {background:#6d44e8cc;border:none;color:#fff;font-weight:bold;padding:0 20px;border-radius:0 0 12px 0;cursor:pointer;}
+    #toggle-view {position:absolute;bottom:40px;right:20px;padding:12px 25px;background:linear-gradient(90deg,#45b3e6 30%,#871adf 80%);color:#fff;font-weight:bold;outline:none;border:none;border-radius:14px;font-size:1.08em;box-shadow:0 2px 12px #161922b0;cursor:pointer;pointer-events:auto;}
+    .speech-bubble {position:absolute;min-width:60px;max-width:180px;background:rgba(0,0,0,0.85);color:#ffe9fc;border-radius:10px;padding:7px 12px;font-size:1em;text-align:center;pointer-events:none;z-index:20;border:1.2px solid #a372fa77;box-shadow:0px 4px 18px #9600b94d;animation:popin 0.18s;}
+    @keyframes popin {0%{transform:scale(0.6);opacity:0;}100%{transform:scale(1);opacity:1;}}
+    #email-modal {
+      position: fixed; left: 0; top: 0; width: 100vw; height: 100vh; background: rgba(20,20,30,0.93);
+      z-index: 1000; display: flex; align-items: center; justify-content: center;
+    }
+    #email-modal-content {
+      background: #23243a; padding: 36px 32px 28px 32px; border-radius: 18px; box-shadow: 0 4px 32px #000a;
+      display: flex; flex-direction: column; align-items: center; min-width: 320px;
+    }
+    #email-modal-content h2 { color: #fff; margin-bottom: 18px; font-size: 1.3em; }
+    #email-modal-content input[type="email"] {
+      padding: 10px 14px; border-radius: 8px; border: none; font-size: 1.08em; margin-bottom: 18px; width: 100%;
+      background: #181a28; color: #fff; outline: none; box-shadow: 0 1px 6px #0003;
+    }
+    #email-modal-content button {
+      background: linear-gradient(90deg,#45b3e6 30%,#871adf 80%); color: #fff; font-weight: bold;
+      border: none; border-radius: 8px; padding: 10px 28px; font-size: 1.08em; cursor: pointer;
+      box-shadow: 0 2px 12px #161922b0;
+    }
+    #email-error { color: #ffb3b3; margin-bottom: 8px; font-size: 1em; min-height: 18px; }
+    /* --- MINIMAPA --- */
+    #minimap-container {
+      position: absolute;
+      top: 18px;
+      right: 18px;
+      width: 240px;
+      background: #181a28e6;
+      border-radius: 14px;
+      box-shadow: 0 2px 16px #0008;
+      z-index: 30;
+      pointer-events: auto;
+      transition: height 0.2s, width 0.2s;
+      overflow: hidden;
+      user-select: none;
+    }
+    #minimap-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 8px 14px 2px 14px;
+      color: #fff;
+      font-weight: bold;
+      font-size: 1.08em;
+      background: #23243a;
+      border-radius: 14px 14px 0 0;
+      cursor: move;
+    }
+    #minimap-toggle {
+      background: none;
+      border: none;
+      color: #fff;
+      font-size: 1.2em;
+      font-weight: bold;
+      cursor: pointer;
+      padding: 0 8px;
+      border-radius: 6px;
+      transition: background 0.15s;
+    }
+    #minimap-toggle:hover { background: #3a3a5a; }
+    #minimap {
+      display: block;
+      margin: 0 auto 10px auto;
+      background: #10131a;
+      border-radius: 10px;
+      box-shadow: 0 1px 8px #0006;
+      border: 1.5px solid #2e2e4a;
+      transition: opacity 0.2s;
+    }
+    #minimap-container.minimized {
+      height: 38px !important;
+      width: 120px !important;
+      min-width: 0;
+      min-height: 0;
+    }
+    #minimap-container.minimized #minimap {
+      display: none;
+    }
+    #minimap-container.minimized #minimap-header span {
+      font-size: 1em;
+    }
+  </style>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.157.0/build/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.157.0/examples/js/controls/OrbitControls.js"></script>
+  <script src="/socket.io/socket.io.js"></script>
+</head>
+<body>
+  <div id="game-container"></div>
+  <div id="ui">
+    <div id="chat">
+      <div id="messages"></div>
+      <form id="chat-form" autocomplete="off">
+        <input id="chat-input" type="text" maxlength="70" autocomplete="off" placeholder="Diga algo místico..."/>
+        <button type="submit">Enviar</button>
+      </form>
+    </div>
+    <button id="toggle-view">Camera: 1ª Pessoa</button>
+    <!-- MINIMAPA -->
+    <div id="minimap-container">
+      <div id="minimap-header">
+        <span>Minimapa</span>
+        <button id="minimap-toggle">–</button>
+      </div>
+      <canvas id="minimap" width="220" height="220"></canvas>
+    </div>
+  </div>
+  <!-- Modal para email -->
+  <div id="email-modal">
+    <form id="email-modal-content" autocomplete="off">
+      <h2>Bem-vindo! Informe seu email para acessar:</h2>
+      <div id="email-error"></div>
+      <input id="email-input" type="email" placeholder="Seu email..." required autocomplete="off" />
+      <button type="submit">Entrar</button>
+    </form>
+  </div>
+  <script>
+    // --- Solicitação de email ao iniciar ---
+    let playerName = "";
+    let emailModal = document.getElementById('email-modal');
+    let emailInput = document.getElementById('email-input');
+    let emailError = document.getElementById('email-error');
+    let emailForm = document.getElementById('email-modal-content');
+
+    function validarEmail(email) {
+      // Regex simples para validação básica
+      return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+    }
+
+    function extrairNome(email) {
+      return email.split('@')[0];
+    }
+
+    function iniciarJogoComEmail(email) {
+      playerName = extrairNome(email);
+      emailModal.style.display = "none";
+      iniciarJogo();
+    }
+
+    emailForm.onsubmit = function(e) {
+      e.preventDefault();
+      let email = emailInput.value.trim();
+      if (!validarEmail(email)) {
+        emailError.textContent = "Digite um email válido.";
+        return;
+      }
+      emailError.textContent = "";
+      iniciarJogoComEmail(email);
+    };
+
+    emailInput.addEventListener('keydown', function(e) {
+      if (e.key === "Enter") {
+        emailForm.dispatchEvent(new Event('submit', {cancelable:true, bubbles:true}));
+      }
+    });
+
+    // --- O resto do código do jogo fica dentro desta função ---
+    function iniciarJogo() {
+      // --- NOVO CENÁRIO: PAISAGEM GALÁCTICA COM CACHOEIRA ---
+      const scene = new THREE.Scene();
+      scene.background = new THREE.Color(0x10131A);
+
+      // Fundo galáctico
+      const loader = new THREE.TextureLoader();
+      const renderer = new THREE.WebGLRenderer({antialias:true});
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.shadowMap.enabled = true;
+      document.querySelector('#game-container').appendChild(renderer.domElement);
+
+      loader.load("https://cdn.pixabay.com/photo/2016/11/29/05/08/space-1867615_1280.jpg", texture => {
+        const rt = new THREE.WebGLCubeRenderTarget(texture.image.height);
+        rt.fromEquirectangularTexture(renderer, texture);
+        scene.background = rt.texture;
+      });
+
+      // Luzes
+      const ambient = new THREE.AmbientLight(0xffffff, 0.6);
+      const dir = new THREE.DirectionalLight(0xffffff, 1.5);
+      dir.position.set(150, 300, 200);
+      dir.castShadow = true;
+      dir.shadow.mapSize.set(2048, 2048);
+      dir.shadow.camera.left = -200;
+      dir.shadow.camera.right = 200;
+      dir.shadow.camera.top = 200;
+      dir.shadow.camera.bottom = -200;
+      dir.shadow.camera.near = 0.5;
+      dir.shadow.camera.far = 1000;
+      scene.add(ambient); scene.add(dir);
+
+      // Materiais
+      const materials = {
+        grass: new THREE.MeshLambertMaterial({ color: 0x8bc34a }),
+        rock: new THREE.MeshLambertMaterial({ color: 0x9e9e9e }),
+        darkRock: new THREE.MeshLambertMaterial({ color: 0x607d8b }),
+        water: new THREE.MeshLambertMaterial({ color: 0x4fc3f7, transparent: true, opacity: 0.85 }),
+        trunk: new THREE.MeshLambertMaterial({ color: 0x5d4037 }),
+        leaves: new THREE.MeshLambertMaterial({ color: 0x33691e }),
+        snow: new THREE.MeshLambertMaterial({ color: 0xffffff }),
+        bush: new THREE.MeshLambertMaterial({ color: 0x558b2f }),
+        bridge: new THREE.MeshLambertMaterial({ color: 0xa1887f }),
+        waterParticle: new THREE.MeshLambertMaterial({ color: 0x6ab3f7, transparent: true, opacity: 0.75 }),
+        splashParticle: new THREE.MeshLambertMaterial({ color: 0xffffff, transparent: true, opacity: 0.6 })
+      };
+
+      // Terreno base e grama
+      const groundSize = 300;
+      const groundThickness = 20;
+      const grassThickness = 1;
+      const groundLevel = grassThickness;
+      const base = new THREE.Mesh(new THREE.BoxGeometry(groundSize, groundThickness, groundSize), materials.darkRock);
+      base.position.y = -groundThickness / 2;
+      base.receiveShadow = true;
+      scene.add(base);
+      const grass = new THREE.Mesh(new THREE.BoxGeometry(groundSize, grassThickness, groundSize), materials.grass);
+      grass.position.y = grassThickness / 2;
+      grass.receiveShadow = true;
+      scene.add(grass);
+
+      // Penhascos ao redor
+      function createCliffSegment(x, y, z, rotY) {
+        const cliffHeight = groundThickness;
+        const length = 15;
+        const width = 10;
+        const cliffGeom = new THREE.BoxGeometry(length, cliffHeight * (0.8 + Math.random() * 0.4), width * (0.7 + Math.random() * 0.6));
+        const cliffMesh = new THREE.Mesh(cliffGeom, materials.darkRock);
+        cliffMesh.position.set(x, y - cliffHeight / 2 + (cliffGeom.parameters.height / 2), z);
+        cliffMesh.rotation.y = rotY + (Math.random() - 0.5) * 0.5;
+        cliffMesh.rotation.x = (Math.random() - 0.5) * 0.2;
+        cliffMesh.rotation.z = (Math.random() - 0.5) * 0.2;
+        cliffMesh.castShadow = true;
+        cliffMesh.receiveShadow = true;
+        scene.add(cliffMesh);
+      }
+      const halfGround = groundSize / 2;
+      for (let x = -halfGround; x < halfGround; x += 12) {
+        createCliffSegment(x, 0, halfGround + 5, 0);
+        createCliffSegment(x, 0, -halfGround - 5, 0);
+      }
+      for (let z = -halfGround; z < halfGround; z += 12) {
+        createCliffSegment(-halfGround - 5, 0, z, Math.PI / 2);
+        createCliffSegment(halfGround + 5, 0, z, Math.PI / 2);
+      }
+
+      // Montanhas fixas
+      function createMountain(x, z, radius = 30, height = 60) {
+        const group = new THREE.Group();
+        const coneGeo = new THREE.ConeGeometry(radius, height, 6);
+        const cone = new THREE.Mesh(coneGeo, materials.rock);
+        cone.position.y = height / 2;
+        cone.castShadow = true;
+        cone.receiveShadow = true;
+        group.add(cone);
+        if (height > 40) {
+          const snowHeight = height * 0.3;
+          const snowRadius = radius * 0.55;
+          const snow = new THREE.Mesh(new THREE.ConeGeometry(snowRadius, snowHeight, 5), materials.snow);
+          snow.position.y = height - (snowHeight / 2);
+          snow.castShadow = true;
+          group.add(snow);
+        }
+        group.position.set(x, groundLevel, z);
+        scene.add(group);
+        return { group, radius, height };
+      }
+      const mountainData = [
+        { x: 0, z: -120, radius: 35, height: 75 },
+        { x: 90, z: 100, radius: 30, height: 60 },
+        { x: -110, z: -80, radius: 40, height: 80 },
+        { x: 60, z: -120, radius: 25, height: 55 },
+        { x: -130, z: 50, radius: 38, height: 70 },
+        { x: -110, z: 60, radius: 36, height: 50 },
+        { x: -130, z: 80, radius: 38, height: 75 },
+        { x: 120, z: -50, radius: 32, height: 65 }
+      ];
+      mountainData.forEach(data => createMountain(data.x, data.z, data.radius, data.height));
+
+      // Rio e cachoeira
+      const riverShape = new THREE.Shape();
+      const rw = 12;
+      const rl = groundSize * 0.8;
+      const riverStartX = -rl / 2;
+      const riverStartY = rw / 2;
+      const riverLevel = groundLevel + 0.1;
+      riverShape.moveTo(riverStartX, riverStartY);
+      riverShape.bezierCurveTo(-rl * 0.25, rw * 2, rl * 0.2, -rw * 1.2, rl / 2, rw / 2);
+      riverShape.lineTo(rl / 2, -rw / 2);
+      riverShape.bezierCurveTo(rl * 0.2, -rw * 2, -rl * 0.25, rw * 1.2, riverStartX, -rw / 2);
+      riverShape.lineTo(riverStartX, riverStartY);
+      const river = new THREE.Mesh(new THREE.ShapeGeometry(riverShape), materials.water);
+      river.rotation.x = -Math.PI / 2;
+      river.position.y = riverLevel;
+      river.receiveShadow = true;
+      scene.add(river);
+
+      // Cachoeira (rochas, partículas de água e splash)
+      const waterfallHeight = 45;
+      const waterfallWidth = rw * 5;
+      const waterfallDepth = 25;
+      const waterfallTopY = waterfallHeight + riverLevel;
+      const waterfallBottomY = riverLevel + 0.5;
+      const waterfallLandX = riverStartX + 5;
+      const waterfallLandZ = 0;
+      // Rochas do topo
+      const sourceRockGroup = new THREE.Group();
+      for (let i = 0; i < 100; i++) {
+        const rockSize = 3 + Math.random() * 6;
+        const rockGeo = new THREE.IcosahedronGeometry(rockSize, 0);
+        const rockMesh = new THREE.Mesh(rockGeo, materials.rock);
+        rockMesh.position.set(
+          waterfallLandX + (Math.random() - 0.5) * (waterfallWidth + 15),
+          waterfallTopY - 2 + (Math.random() - 0.5) * 5,
+          waterfallLandZ + (Math.random() - 0.5) * (waterfallDepth + 35)
+        );
+        rockMesh.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI);
+        rockMesh.castShadow = true;
+        rockMesh.receiveShadow = true;
+        sourceRockGroup.add(rockMesh);
+      }
+      scene.add(sourceRockGroup);
+      // Estrutura da cachoeira
+      const structureRockGroup = new THREE.Group();
+      for (let i = 0; i < 80; i++) {
+        const rockSize = 1.5 + Math.random() * 4;
+        const rockGeo = new THREE.IcosahedronGeometry(rockSize, 0);
+        const rockMesh = new THREE.Mesh(rockGeo, materials.rock);
+        const angle = Math.random() * Math.PI * 2;
+        const radius = waterfallWidth / 2 + 1 + Math.random() * ((waterfallWidth + 15) / 2 - waterfallWidth / 2);
+        const xOffset = Math.cos(angle) * radius;
+        const zOffset = Math.sin(angle) * radius;
+        rockMesh.position.set(
+          waterfallLandX + xOffset,
+          groundLevel + 2 + Math.random() * (waterfallTopY - 3 - (groundLevel + 2)),
+          waterfallLandZ + zOffset
+        );
+        rockMesh.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI);
+        rockMesh.castShadow = true;
+        rockMesh.receiveShadow = true;
+        structureRockGroup.add(rockMesh);
+      }
+      scene.add(structureRockGroup);
+      // Rochas laterais
+      const sideRockGroup = new THREE.Group();
+      for (let i = 0; i < 40; i++) {
+        const rockSize = 2 + Math.random() * 5;
+        const rockGeo = new THREE.IcosahedronGeometry(rockSize, 0);
+        const rockMesh = new THREE.Mesh(rockGeo, materials.rock);
+        rockMesh.position.set(
+          waterfallLandX + (Math.random() - 0.5) * (waterfallWidth + 15) * 0.8,
+          groundLevel + rockSize/2 + Math.random() * (waterfallTopY - groundLevel - rockSize/2),
+          waterfallLandZ - (waterfallDepth + 35) / 2 - Math.random() * 12
+        );
+        rockMesh.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI);
+        rockMesh.castShadow = true;
+        rockMesh.receiveShadow = true;
+        sideRockGroup.add(rockMesh);
+      }
+      for (let i = 0; i < 40; i++) {
+        const rockSize = 2 + Math.random() * 5;
+        const rockGeo = new THREE.IcosahedronGeometry(rockSize, 0);
+        const rockMesh = new THREE.Mesh(rockGeo, materials.rock);
+        rockMesh.position.set(
+          waterfallLandX + (Math.random() - 0.5) * (waterfallWidth + 15) * 0.8,
+          groundLevel + rockSize/2 + Math.random() * (waterfallTopY - groundLevel - rockSize/2),
+          waterfallLandZ + (waterfallDepth + 35) / 2 + Math.random() * 12
+        );
+        rockMesh.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI);
+        rockMesh.castShadow = true;
+        rockMesh.receiveShadow = true;
+        sideRockGroup.add(rockMesh);
+      }
+      scene.add(sideRockGroup);
+
+      // Partículas de água caindo
+      const waterParticleGroup = new THREE.Group();
+      const waterParticles = [];
+      for (let i = 0; i < 400; i++) {
+        const particleSize = 0.3 + Math.random() * 0.8;
+        const particleGeo = new THREE.IcosahedronGeometry(particleSize, 0);
+        const particleMesh = new THREE.Mesh(particleGeo, materials.waterParticle);
+        particleMesh.position.set(
+          waterfallLandX + (Math.random() - 1) * waterfallWidth,
+          waterfallBottomY + Math.random() * waterfallHeight,
+          waterfallLandZ + (Math.random() - 1) * waterfallDepth
+        );
+        particleMesh.castShadow = false;
+        particleMesh.receiveShadow = false;
+        waterParticleGroup.add(particleMesh);
+        waterParticles.push(particleMesh);
+      }
+      scene.add(waterParticleGroup);
+
+      // Splash estático
+      const splashGroup = new THREE.Group();
+      for (let i = 0; i < 120; i++) {
+        const splashSize = Math.random() * 1.2 + 0.4;
+        const splashParticle = new THREE.Mesh(new THREE.IcosahedronGeometry(splashSize, 0), materials.splashParticle);
+        splashParticle.position.set(
+          waterfallLandX + (Math.random() - 0.5) * waterfallWidth * 1.5,
+          waterfallBottomY + (Math.random() - 0.7) * 6.5,
+          waterfallLandZ + (Math.random() - 0.5) * (waterfallDepth + 10)
+        );
+        splashParticle.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI);
+        splashGroup.add(splashParticle);
+      }
+      scene.add(splashGroup);
+
+      // Ponte sobre o rio
+      const bridge = new THREE.Group();
+      const bridgeCrossingX = 0;
+      const bridgeWidth = 6;
+      const riverZExtentAtCenter = rw * 1.5;
+      const bridgeLength = riverZExtentAtCenter * 2 + 8;
+      const bridgeDeckHeight = 1;
+      const bridgeDeckY = riverLevel + 5;
+      const deckGeo = new THREE.BoxGeometry(bridgeWidth, bridgeDeckHeight, bridgeLength);
+      const deck = new THREE.Mesh(deckGeo, materials.bridge);
+      deck.position.y = bridgeDeckY;
+      deck.castShadow = true; deck.receiveShadow = true;
+      bridge.add(deck);
+      const supportWidth = 1.5; const supportDepth = 1.5;
+      const supportHeight = bridgeDeckY - (groundLevel - 1);
+      const supportY = bridgeDeckY - bridgeDeckHeight / 2 - supportHeight / 2;
+      const supportGeo = new THREE.BoxGeometry(supportWidth, supportHeight, supportDepth);
+      const supportZOffset = riverZExtentAtCenter + 1.0;
+      const support1 = new THREE.Mesh(supportGeo, materials.bridge);
+      support1.position.set(0, supportY, supportZOffset);
+      support1.castShadow = true; support1.receiveShadow = true;
+      const support2 = new THREE.Mesh(supportGeo, materials.bridge);
+      support2.position.set(0, supportY, -supportZOffset);
+      support2.castShadow = true; support2.receiveShadow = true;
+      bridge.add(support1, support2);
+      bridge.position.set(bridgeCrossingX, 0, 0);
+      scene.add(bridge);
+
+      // Árvores e arbustos (evitando áreas fixas)
+      function createTree(x, z, scale = 1) {
+        const group = new THREE.Group();
+        const trunkHeight = 6 * scale;
+        const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.4 * scale, 0.5 * scale, trunkHeight, 6), materials.trunk);
+        trunk.position.y = trunkHeight / 2;
+        trunk.castShadow = true;
+        group.add(trunk);
+        const canopyHeight = 8 * scale;
+        const canopy = new THREE.Mesh(new THREE.ConeGeometry(2 * scale, canopyHeight, 6), materials.leaves);
+        canopy.position.y = trunkHeight + canopyHeight / 2 -1*scale;
+        canopy.castShadow = true;
+        group.add(canopy);
+        group.position.set(x, groundLevel, z);
+        scene.add(group);
+      }
+      const treeAvoidZones = [
+        { x: waterfallLandX, z: waterfallLandZ, width: waterfallWidth + 27, depth: waterfallDepth + 47, type: 'rect' },
+        { x: bridgeCrossingX, z: 0, width: bridgeWidth + 4, depth: bridgeLength + 4, type: 'rect' },
+        { x: 0, z: 0, width: rl * 1.1, depth: rw * 4, type: 'rect'}
+      ];
+      mountainData.forEach(mt => {
+        treeAvoidZones.push({ x: mt.x, z: mt.z, radius: mt.radius * 1.1, type: 'circle' });
+      });
+      for (let i = 0; i < 120; i++) {
+        const x = (Math.random() - 0.5) * groundSize * 0.95;
+        const z = (Math.random() - 0.5) * groundSize * 0.95;
+        let isTooClose = false;
+        for (const zone of treeAvoidZones) {
+          if (zone.type === 'rect') {
+            if (Math.abs(x - zone.x) < zone.width / 2 && Math.abs(z - zone.z) < zone.depth / 2) {
+              isTooClose = true;
+              break;
+            }
+          } else if (zone.type === 'circle') {
+            const distSq = (x - zone.x)**2 + (z - zone.z)**2;
+            if (distSq < zone.radius**2) {
+              isTooClose = true;
+              break;
+            }
+          }
+        }
+        if (!isTooClose) {
+          createTree(x, z, 0.8 + Math.random() * 0.5);
+        } else {
+          i--;
+        }
+      }
+      for (let i = 0; i < 70; i++) {
+        const x = (Math.random() - 0.5) * groundSize * 0.9;
+        const z = (Math.random() - 0.5) * groundSize * 0.9;
+        let isTooClose = false;
+        for (const zone of treeAvoidZones) {
+          const bushRadius = 1.5;
+          if (zone.type === 'rect') {
+            if (Math.abs(x - zone.x) < zone.width / 2 + bushRadius && Math.abs(z - zone.z) < zone.depth / 2 + bushRadius) {
+              isTooClose = true;
+              break;
+            }
+          } else if (zone.type === 'circle') {
+            const distSq = (x - zone.x)**2 + (z - zone.z)**2;
+            if (distSq < (zone.radius + bushRadius)**2) {
+              isTooClose = true;
+              break;
+            }
+          }
+        }
+        if (!isTooClose) {
+          const bush = new THREE.Mesh(new THREE.IcosahedronGeometry(2, 0), materials.bush);
+          bush.position.set(x, groundLevel + 1, z);
+          bush.castShadow = true;
+          scene.add(bush);
+        } else {
+          i--;
+        }
+      }
+
+      // Câmera
+      const camera = new THREE.PerspectiveCamera(70, window.innerWidth/window.innerHeight, 0.1, 1500);
+
+      // --- MULTIPLAYER SOCKET.IO ---
+      const socket = io();
+
+      // --- PLAYER MULTIPLAYER ---
+      function createPlayerObject(color = 0xf0c837) {
+        const group = new THREE.Group();
+        const body = new THREE.Mesh(
+          new THREE.SphereGeometry(1.1, 16, 14),
+          new THREE.MeshPhongMaterial({color: color, shininess:44})
+        ); group.add(body);
+        const aura = new THREE.Mesh(
+          new THREE.SphereGeometry(1.5, 16, 14),
+          new THREE.MeshPhysicalMaterial({
+            color: 0x6d38e6, transparent: true, opacity: 0.20, transmission:0.36, roughness:0.7
+          })
+        ); group.add(aura);
+        const jewel = new THREE.Mesh(
+          new THREE.SphereGeometry(0.32, 12, 10),
+          new THREE.MeshPhongMaterial({color:0xf9c6f0, shininess:90})
+        ); jewel.position.set(0,1.25,0); group.add(jewel);
+        return group;
+      }
+
+      let playerId = null;
+      let players = {};
+      const playerObjects = {};
+
+      // Gera spawn e cor para o jogador local
+      function getRandomSpawn() {
+        let dist = Math.random()*80+40, theta = Math.random()*2*Math.PI;
+        return {x:Math.cos(theta)*dist,y:0,z:Math.sin(theta)*dist};
+      }
+      function randomColor() {
+        let arr = [0xe1caff, 0x388ad2, 0xffe04b, 0xea469a, 0x45dbbf, 0xe4ab62, 0xbd8cfc];
+        return arr[Math.floor(Math.random()*arr.length)];
+      }
+
+      // Estado do jogador local
+      let myState = {
+        pos: getRandomSpawn(),
+        rotY: 0,
+        color: randomColor(),
+        name: playerName,
+        id: null,
+        obj: null
+      };
+
+      // Envia dados do jogador local ao servidor
+      function joinServer() {
+        socket.emit('join', {
+          name: myState.name,
+          pos: myState.pos,
+          rotY: myState.rotY,
+          color: myState.color
+        });
+      }
+
+      // Atualiza todos os jogadores recebidos do servidor
+      socket.on('players', (serverPlayers) => {
+        // Adiciona/atualiza/remover jogadores
+        for (const id in serverPlayers) {
+          if (!players[id]) {
+            // Novo player
+            players[id] = serverPlayers[id];
+            const obj = createPlayerObject(serverPlayers[id].color);
+            scene.add(obj);
+            playerObjects[id] = obj;
+          }
+          // Atualiza dados
+          players[id].pos = serverPlayers[id].pos;
+          players[id].rotY = serverPlayers[id].rotY;
+          players[id].name = serverPlayers[id].name;
+          players[id].color = serverPlayers[id].color;
+        }
+        // Remove players que saíram
+        for (const id in playerObjects) {
+          if (!serverPlayers[id]) {
+            scene.remove(playerObjects[id]);
+            delete playerObjects[id];
+            delete players[id];
+          }
+        }
+      });
+
+      // Descobre meu id
+      socket.on('connect', () => {
+        playerId = socket.id;
+        myState.id = playerId;
+        if (!myState.obj) {
+          myState.obj = createPlayerObject(myState.color);
+          scene.add(myState.obj);
+          playerObjects[playerId] = myState.obj;
+        }
+        joinServer();
+      });
+
+      // CONTROLES E MOVIMENTO
+      let move = {forward:0, back:0, left:0, right:0};
+      let cameraMode = "third";
+      document.getElementById('toggle-view').onclick = ()=>{
+        cameraMode = cameraMode==='third' ? 'first' : 'third';
+        document.getElementById('toggle-view').innerText = cameraMode==='third' ? 'Camera: 1ª Pessoa' : 'Camera: 3ª Pessoa';
+      };
+      document.addEventListener('keydown', e=>{
+        if(document.activeElement.id === "chat-input") return;
+        if(e.key==='w') move.forward=1;
+        if(e.key==='s') move.back=1;
+        if(e.key==='a') move.left=1;
+        if(e.key==='d') move.right=1;
+      });
+      document.addEventListener('keyup', e=>{
+        if(e.key==='w') move.forward=0;
+        if(e.key==='s') move.back=0;
+        if(e.key==='a') move.left=0;
+        if(e.key==='d') move.right=0;
+      });
+
+      // --- MOUSELOOK PARA 1ª PESSOA ---
+      let pointerLocked = false;
+      let mouseSensitivity = 0.002;
+      let pitch = 0; // ângulo vertical da câmera
+      // Ativa pointer lock ao entrar em 1ª pessoa
+      function enablePointerLock() {
+        const canvas = renderer.domElement;
+        if (!pointerLocked) {
+          canvas.requestPointerLock = canvas.requestPointerLock || canvas.mozRequestPointerLock;
+          if (canvas.requestPointerLock) canvas.requestPointerLock();
+        }
+      }
+      function disablePointerLock() {
+        document.exitPointerLock = document.exitPointerLock || document.mozExitPointerLock;
+        if (document.exitPointerLock) document.exitPointerLock();
+      }
+      // Alterna pointer lock ao trocar de modo de câmera
+      document.getElementById('toggle-view').addEventListener('click', ()=>{
+        if(cameraMode==='first') enablePointerLock();
+        else disablePointerLock();
+      });
+      // Ativa pointer lock automaticamente ao entrar em 1ª pessoa
+      function checkPointerLock() {
+        if(cameraMode==='first' && !pointerLocked) enablePointerLock();
+      }
+      // Eventos pointer lock
+      document.addEventListener('pointerlockchange', onPointerLockChange, false);
+      document.addEventListener('mozpointerlockchange', onPointerLockChange, false);
+      function onPointerLockChange() {
+        pointerLocked = (document.pointerLockElement === renderer.domElement || document.mozPointerLockElement === renderer.domElement);
+      }
+      // Movimento do mouse para rotacionar a câmera em 1ª pessoa
+      renderer.domElement.addEventListener('mousemove', function(e){
+        if(cameraMode==='first' && pointerLocked) {
+          myState.rotY -= e.movementX * mouseSensitivity;
+          pitch -= e.movementY * mouseSensitivity;
+          pitch = Math.max(-Math.PI/2, Math.min(Math.PI/2, pitch));
+        }
+      });
+
+      function updatePlayer(dt) {
+        let dx = move.right-move.left, dz = move.forward-move.back;
+        if(cameraMode==='third') {
+          myState.rotY -= dx * 2 * dt;
+          if (dz) {
+            myState.pos.x += Math.sin(myState.rotY)*dz*6*dt;
+            myState.pos.z += Math.cos(myState.rotY)*dz*6*dt;
+          }
+        } else {
+          let ang = myState.rotY, forward=dz!==0, strafe=dx!==0;
+          if(forward||strafe){
+            let moveAng = Math.atan2(dx, Math.abs(dz));
+            ang -= moveAng;
+            myState.pos.x -= Math.sin(ang)*Math.sign(dz)*6*dt;
+            myState.pos.z -= Math.cos(ang)*Math.sign(dz)*6*dt;
+          }
+        }
+        // Limite do terreno
+        let rad = Math.sqrt(myState.pos.x**2+myState.pos.z**2);
+        if(rad>groundSize/2-5){myState.pos.x*=(groundSize/2-5)/rad;myState.pos.z*=(groundSize/2-5)/rad;}
+      }
+
+      // Envia movimento para o servidor periodicamente
+      setInterval(() => {
+        if (playerId) {
+          socket.emit('move', {
+            pos: myState.pos,
+            rotY: myState.rotY
+          });
+        }
+      }, 40);
+
+      // ANIMAÇÃO E CÂMERA
+      function updateCamera() {
+        let pos = myState.pos;
+        if(cameraMode==='third') {
+          let camDist=18, camHeight=8, rotY=myState.rotY+Math.PI;
+          camera.position.set(pos.x+Math.sin(rotY)*camDist,pos.y+camHeight,pos.z+Math.cos(rotY)*camDist);
+          camera.lookAt(pos.x, pos.y+2.5, pos.z);
+        } else {
+          camera.position.set(pos.x, pos.y+2.5, pos.z);
+          camera.rotation.set(0, 0, 0);
+          camera.rotateY(myState.rotY);
+          camera.rotateX(pitch);
+        }
+      }
+
+      // CHAT MULTIPLAYER
+      const chatInput = document.getElementById("chat-input");
+      const chatForm = document.getElementById("chat-form");
+      const messagesDiv = document.getElementById("messages");
+      const bubbleLabels = {};
+      function appendMessage(nome, msg) {
+        let div=document.createElement('div');
+        div.innerHTML = `<b style="color:#8ae5ff;">${escapeHtml(nome)}</b>: <span>${escapeHtml(msg)}</span>`;
+        messagesDiv.appendChild(div);
+        messagesDiv.scrollTop = messagesDiv.scrollHeight;
+      }
+      chatForm.onsubmit = e=>{
+        e.preventDefault();
+        let msg=chatInput.value.trim();
+        if(msg.length>0){
+          socket.emit('chat', msg);
+          appendMessage(playerName, msg);
+          showBubble(playerId, msg);
+        }
+        chatInput.value='';
+      };
+
+      socket.on('chat', data => {
+        if (data.id !== playerId) {
+          appendMessage(data.name, data.msg);
+          showBubble(data.id, data.msg);
+        }
+      });
+
+      // Bubbles
+      function showBubble(id, text) {
+        removeBubble(id);
+        let el = document.createElement('div');
+        el.className = "speech-bubble";
+        el.innerText = text;
+        document.body.appendChild(el);
+        bubbleLabels[id] = {el, time: performance.now()};
+        setTimeout(()=>removeBubble(id), 2900);
+      }
+      function removeBubble(id) {
+        if(bubbleLabels[id]) {
+          let el = bubbleLabels[id].el;
+          if(el && el.parentNode) el.parentNode.removeChild(el);
+          delete bubbleLabels[id];
+        }
+      }
+      function updateBubbles() {
+        for(const id in bubbleLabels) {
+          if(playerObjects[id]) {
+            let pos=playerObjects[id].position.clone();
+            pos.y+=2.6;
+            let vector=pos.project(camera);
+            let x = (vector.x*0.5+0.5) * window.innerWidth;
+            let y = (-vector.y*0.5+0.5) * window.innerHeight;
+            let el = bubbleLabels[id].el;
+            el.style.left = `${x-el.offsetWidth/2}px`;
+            el.style.top = `${y-36}px`;
+          }
+        }
+      }
+
+      // --- MINIMAPA ---
+      let minimapCanvas, minimapCtx, minimapVisible = true;
+      let minimapContainer, minimapToggleBtn;
+      let minimapScale = 0.65; // pixels per unit
+      let minimapSize = 220; // canvas size
+      let minimapPadding = 10;
+      let minimapCenter = minimapSize / 2;
+      let minimapDragging = false, minimapDragOffset = {x:0, y:0};
+
+      function setupMinimap() {
+        minimapContainer = document.getElementById('minimap-container');
+        minimapToggleBtn = document.getElementById('minimap-toggle');
+        minimapCanvas = document.getElementById('minimap');
+        minimapCtx = minimapCanvas.getContext('2d');
+
+        minimapToggleBtn.onclick = function() {
+          minimapContainer.classList.toggle('minimized');
+          minimapVisible = !minimapContainer.classList.contains('minimized');
+          minimapToggleBtn.innerText = minimapVisible ? '–' : '+';
+        };
+
+        // Arrastar minimapa
+        let header = document.getElementById('minimap-header');
+        header.addEventListener('mousedown', function(e) {
+          minimapDragging = true;
+          minimapDragOffset.x = e.clientX - minimapContainer.offsetLeft;
+          minimapDragOffset.y = e.clientY - minimapContainer.offsetTop;
+          document.body.style.userSelect = "none";
+        });
+        document.addEventListener('mousemove', function(e) {
+          if (minimapDragging) {
+            minimapContainer.style.left = (e.clientX - minimapDragOffset.x) + "px";
+            minimapContainer.style.top = (e.clientY - minimapDragOffset.y) + "px";
+          }
+        });
+        document.addEventListener('mouseup', function() {
+          minimapDragging = false;
+          document.body.style.userSelect = "";
+        });
+      }
+
+      // Desenha elementos do cenário no minimapa
+      function drawMinimap() {
+        if (!minimapVisible) return;
+        minimapCtx.clearRect(0, 0, minimapSize, minimapSize);
+
+        // Fundo
+        minimapCtx.fillStyle = "#181a28";
+        minimapCtx.fillRect(0, 0, minimapSize, minimapSize);
+
+        // Terreno
+        minimapCtx.strokeStyle = "#3a4a3a";
+        minimapCtx.lineWidth = 2.5;
+        minimapCtx.beginPath();
+        minimapCtx.arc(minimapCenter, minimapCenter, groundSize/2*minimapScale, 0, 2*Math.PI);
+        minimapCtx.stroke();
+
+        // Rio
+        minimapCtx.save();
+        minimapCtx.translate(minimapCenter, minimapCenter);
+        minimapCtx.rotate(0);
+        minimapCtx.beginPath();
+        minimapCtx.moveTo((riverStartX)*minimapScale, (riverStartY)*minimapScale);
+        minimapCtx.bezierCurveTo(
+          (-groundSize*0.8*0.25)*minimapScale, (rw*2)*minimapScale,
+          (groundSize*0.8*0.2)*minimapScale, (-rw*1.2)*minimapScale,
+          (groundSize*0.8/2)*minimapScale, (rw/2)*minimapScale
+        );
+        minimapCtx.lineTo((groundSize*0.8/2)*minimapScale, (-rw/2)*minimapScale);
+        minimapCtx.bezierCurveTo(
+          (groundSize*0.8*0.2)*minimapScale, (-rw*2)*minimapScale,
+          (-groundSize*0.8*0.25)*minimapScale, (rw*1.2)*minimapScale,
+          (riverStartX)*minimapScale, (-rw/2)*minimapScale
+        );
+        minimapCtx.closePath();
+        minimapCtx.fillStyle = "#4fc3f7bb";
+        minimapCtx.fill();
+        minimapCtx.restore();
+
+        // Montanhas
+        mountainData.forEach(mt => {
+          minimapCtx.beginPath();
+          minimapCtx.arc(
+            minimapCenter + mt.x*minimapScale,
+            minimapCenter + mt.z*minimapScale,
+            mt.radius*minimapScale,
+            0, 2*Math.PI
+          );
+          minimapCtx.fillStyle = "#bdbdbd";
+          minimapCtx.globalAlpha = 0.7;
+          minimapCtx.fill();
+          minimapCtx.globalAlpha = 1;
+          minimapCtx.strokeStyle = "#888";
+          minimapCtx.lineWidth = 1.2;
+          minimapCtx.stroke();
+        });
+
+        // Ponte
+        minimapCtx.save();
+        minimapCtx.translate(minimapCenter + bridgeCrossingX*minimapScale, minimapCenter);
+        minimapCtx.rotate(0);
+        minimapCtx.fillStyle = "#a1887f";
+        minimapCtx.fillRect(
+          -bridgeWidth/2*minimapScale,
+          -bridgeLength/2*minimapScale,
+          bridgeWidth*minimapScale,
+          bridgeLength*minimapScale
+        );
+        minimapCtx.restore();
+
+        // Cachoeira (área)
+        minimapCtx.save();
+        minimapCtx.globalAlpha = 0.5;
+        minimapCtx.fillStyle = "#6ab3f7";
+        minimapCtx.fillRect(
+          minimapCenter + (waterfallLandX - waterfallWidth/2)*minimapScale,
+          minimapCenter + (waterfallLandZ - waterfallDepth/2)*minimapScale,
+          waterfallWidth*minimapScale,
+          waterfallDepth*minimapScale
+        );
+        minimapCtx.globalAlpha = 1;
+        minimapCtx.restore();
+
+        // Jogadores
+        for (const id in players) {
+          const p = players[id];
+          let isMe = (id === playerId);
+          let px = minimapCenter + p.pos.x*minimapScale;
+          let pz = minimapCenter + p.pos.z*minimapScale;
+          minimapCtx.beginPath();
+          minimapCtx.arc(px, pz, isMe ? 8 : 6, 0, 2*Math.PI);
+          minimapCtx.fillStyle = isMe ? "#ffe04b" : "#6d38e6";
+          minimapCtx.globalAlpha = isMe ? 0.95 : 0.7;
+          minimapCtx.fill();
+          minimapCtx.globalAlpha = 1;
+          minimapCtx.strokeStyle = "#fff";
+          minimapCtx.lineWidth = isMe ? 2.2 : 1.2;
+          minimapCtx.stroke();
+
+          // Nome
+          minimapCtx.font = "bold 13px Segoe UI, Arial";
+          minimapCtx.fillStyle = "#fff";
+          minimapCtx.textAlign = "center";
+          minimapCtx.fillText(p.name, px, pz - 12);
+        }
+      }
+
+      // Atualiza minimapa a cada frame
+      function updateMinimap() {
+        if (typeof drawMinimap === "function") drawMinimap();
+        requestAnimationFrame(updateMinimap);
+      }
+
+      // --- FIM MINIMAPA ---
+
+      // ANIMAÇÃO PRINCIPAL
+      let lastTime = performance.now();
+      function animate() {
+        requestAnimationFrame(animate);
+        let now = performance.now(), dt = (now - lastTime) * 0.001;
+        lastTime = now;
+
+        // Anima partículas de água da cachoeira
+        waterParticles.forEach(particle => {
+          particle.position.y -= 55.0 * dt;
+          if (particle.position.y < waterfallBottomY) {
+            particle.position.x = waterfallLandX + (Math.random() - 0.5) * waterfallWidth;
+            particle.position.y = waterfallTopY - Math.random() * 2;
+            particle.position.z = waterfallLandZ + (Math.random() - 0.5) * waterfallDepth;
+          }
+        });
+
+        updatePlayer(dt);
+
+        // Atualiza posição e rotação de todos players
+        for (const id in players) {
+          const p = players[id];
+          if (playerObjects[id]) {
+            playerObjects[id].position.set(p.pos.x, 1, p.pos.z);
+            playerObjects[id].rotation.y = p.rotY || 0;
+          }
+        }
+        updateCamera();
+        updateBubbles();
+        renderer.render(scene, camera);
+
+        // Checa pointer lock se necessário
+        checkPointerLock();
+      }
+      animate();
+
+      // RESIZE
+      window.addEventListener('resize', ()=>{
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+      });
+
+      // Utilidades
+      function escapeHtml(str) {
+        return str.replace(/[&<>"'\/]/g, s=>{
+          const map = {"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;","/":"&#x2F;"};
+          return map[s];
+        });
+      }
+
+      // Inicializa minimapa
+      setupMinimap();
+      updateMinimap();
+    }
+    // Não inicia o jogo até o email ser informado
+  </script>
+</body>
+</html>
