@@ -38,6 +38,11 @@ io.on('connection', (socket) => {
 app.use(express.static('public'));
 
 const PORT = process.env.PORT || 3000;
+const path = require('path');
+
+app.get('/', (req, res) => {
+  res.sendFile(path.join(__dirname, 'index.html'));
+});
 server.listen(PORT, () => {
   console.log(`Servidor rodando na porta ${PORT}`);
 });
