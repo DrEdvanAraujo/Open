@@ -35,7 +35,7 @@ io.on('connection', (socket) => {
   });
 });
 
-app.use(express.static('.'));
+app.use(express.static('public'));
 
 server.listen(3000, () => {
   console.log('Servidor rodando em http://localhost:3000');
