@@ -84,6 +84,16 @@
       border: 1.5px solid #2e2e4a;
       transition: opacity 0.2s;
     }
+    /* Elemento para exibir coordenadas no minimapa */
+    #minimap-coords {
+      position: absolute;
+      bottom: 5px;
+      width: 100%;
+      text-align: center;
+      color: #fff;
+      font-size: 14px;
+      pointer-events: none;
+    }
     #minimap-container.minimized {
       height: 38px !important;
       width: 120px !important;
@@ -95,6 +105,20 @@
     }
     #minimap-container.minimized #minimap-header span {
       font-size: 1em;
+    }
+    /* --- INFO BOX DAS ABELHAS --- */
+    .bee-info-box {
+      position: absolute;
+      background: rgba(0, 0, 0, 0.8);
+      color: #fff;
+      padding: 8px 12px;
+      border-radius: 6px;
+      cursor: pointer;
+      pointer-events: auto;
+      font-size: 1em;
+      border: 1px solid #fff;
+      z-index: 150;
+      display: none;
     }
   </style>
   <script src="https://cdn.jsdelivr.net/npm/three@0.157.0/build/three.min.js"></script>
@@ -119,6 +143,7 @@
         <button id="minimap-toggle">–</button>
       </div>
       <canvas id="minimap" width="220" height="220"></canvas>
+      <div id="minimap-coords"></div>
     </div>
   </div>
   <!-- Modal para email -->
@@ -131,6 +156,14 @@
     </form>
   </div>
   <script>
+    // --- Variável global para o box de informação das abelhas ---
+    let beeInfoBox = document.createElement("div");
+    beeInfoBox.id = "bee-info-box";
+    beeInfoBox.className = "bee-info-box";
+    beeInfoBox.innerHTML = "🐝 O Poder das Abelhas - Apiterapia - Clique";
+    beeInfoBox.onclick = () => { window.location.href = "https://edaraujofilho.criadorlw.com.br/aula10pics"; };
+    document.body.appendChild(beeInfoBox);
+
     // --- Solicitação de email ao iniciar ---
     let playerName = "";
     let emailModal = document.getElementById('email-modal');
@@ -139,20 +172,16 @@
     let emailForm = document.getElementById('email-modal-content');
 
     function validarEmail(email) {
-      // Regex simples para validação básica
       return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
     }
-
     function extrairNome(email) {
       return email.split('@')[0];
     }
-
     function iniciarJogoComEmail(email) {
       playerName = extrairNome(email);
       emailModal.style.display = "none";
       iniciarJogo();
     }
-
     emailForm.onsubmit = function(e) {
       e.preventDefault();
       let email = emailInput.value.trim();
@@ -163,33 +192,81 @@
       emailError.textContent = "";
       iniciarJogoComEmail(email);
     };
-
     emailInput.addEventListener('keydown', function(e) {
       if (e.key === "Enter") {
         emailForm.dispatchEvent(new Event('submit', {cancelable:true, bubbles:true}));
       }
     });
 
-    // --- O resto do código do jogo fica dentro desta função ---
-    function iniciarJogo() {
-      // --- NOVO CENÁRIO: PAISAGEM GALÁCTICA COM CACHOEIRA ---
-      const scene = new THREE.Scene();
-      scene.background = new THREE.Color(0x10131A);
+    // REMOVIDO: Todo código relacionado a placas foi eliminado.
+    // (Variáveis, funções para abrir/fechar modal, criação e remoção manual de placas)
 
-      // Fundo galáctico
+    // =========  BEE PORTAL  =====================================
+    class BeePortal {
+      constructor(scene, startPos, phaseShift = 0) {
+        const bodyMat  = new THREE.MeshLambertMaterial({ color: 0xffcc00 });
+        const blackMat = new THREE.MeshLambertMaterial({ color: 0x222222 });
+        const wingMat  = new THREE.MeshLambertMaterial({ color: 0xffffff, transparent: true, opacity: 0.65 });
+        this.mesh = new THREE.Group();
+        const body = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.18, 0.18), bodyMat);
+        this.mesh.add(body);
+        const head = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.12, 0.12), blackMat);
+        head.position.set(-0.21, 0, 0);
+        this.mesh.add(head);
+        const wing1 = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.18, 0.36), wingMat);
+        wing1.position.set(0.06, 0.15, 0);
+        this.mesh.add(wing1);
+        const wing2 = wing1.clone();
+        wing2.position.x = -0.06;
+        this.mesh.add(wing2);
+        const glow = new THREE.PointLight(0xffee88, 0.8, 2);
+        glow.position.y = 0.25;
+        this.mesh.add(glow);
+        this.center = startPos.clone();
+        this.mesh.position.copy(this.center);
+        this.phase = phaseShift;
+        scene.add(this.mesh);
+      }
+      update(t) {
+        const rX = 8, rZ = 6, speed = 0.4;
+        const tt = t + this.phase;
+        this.mesh.position.x = this.center.x + Math.sin(tt * speed) * rX;
+        this.mesh.position.z = this.center.z + Math.sin(tt * speed * 2) * rZ;
+        this.mesh.position.y = this.center.y + Math.sin(tt * 3) * 0.25;
+        const aheadX = this.center.x + Math.sin((tt + 0.05) * speed) * rX;
+        const aheadZ = this.center.z + Math.sin((tt + 0.05) * speed * 2) * rZ;
+        this.mesh.lookAt(aheadX, this.mesh.position.y, aheadZ);
+      }
+    }
+    // =========  /BEE PORTAL  ===================================
+
+    let scene, camera;
+    function iniciarJogo() {
+      scene = new THREE.Scene();
+      scene.background = new THREE.Color(0x10131A);
+      /* ---------- ABELHAS NO MAPA ---------- */
+      const beeArray = [];
+      const beeRadius = 50;
+      for (let i = 0; i < 36; i++){
+        const ang  = i * (Math.PI * 2 / 6);
+        const xPos = Math.cos(ang) * beeRadius;
+        const zPos = Math.sin(ang) * beeRadius;
+        const yPos = 2 + Math.random() * 1.5;
+        const bee  = new BeePortal(scene, new THREE.Vector3(xPos, yPos, zPos), i);
+        beeArray.push(bee);
+      }
+      /* ------------------------------------- */
       const loader = new THREE.TextureLoader();
       const renderer = new THREE.WebGLRenderer({antialias:true});
       renderer.setSize(window.innerWidth, window.innerHeight);
       renderer.shadowMap.enabled = true;
       document.querySelector('#game-container').appendChild(renderer.domElement);
-
+      const clock = new THREE.Clock();
       loader.load("https://cdn.pixabay.com/photo/2016/11/29/05/08/space-1867615_1280.jpg", texture => {
         const rt = new THREE.WebGLCubeRenderTarget(texture.image.height);
         rt.fromEquirectangularTexture(renderer, texture);
         scene.background = rt.texture;
       });
-
-      // Luzes
       const ambient = new THREE.AmbientLight(0xffffff, 0.6);
       const dir = new THREE.DirectionalLight(0xffffff, 1.5);
       dir.position.set(150, 300, 200);
@@ -202,8 +279,19 @@
       dir.shadow.camera.near = 0.5;
       dir.shadow.camera.far = 1000;
       scene.add(ambient); scene.add(dir);
-
-      // Materiais
+      
+      // --- CICLO DIA-NOITE ---
+      const dayColor = new THREE.Color(0x87CEEB);
+      const nightColor = new THREE.Color(0x0a0a23);
+      const cycleDuration = 3600;
+      function updateDayNightCycle(time) {
+        const phase = (time % cycleDuration) / cycleDuration;
+        const factor = (Math.sin(phase * Math.PI * 2 - Math.PI / 2) + 1) / 2;
+        scene.background = dayColor.clone().lerp(nightColor, 1 - factor);
+        ambient.intensity = 0.2 + 0.6 * factor;
+        dir.intensity = 0.1 + 1.5 * factor;
+      }
+      
       const materials = {
         grass: new THREE.MeshLambertMaterial({ color: 0x8bc34a }),
         rock: new THREE.MeshLambertMaterial({ color: 0x9e9e9e }),
@@ -217,8 +305,6 @@
         waterParticle: new THREE.MeshLambertMaterial({ color: 0x6ab3f7, transparent: true, opacity: 0.75 }),
         splashParticle: new THREE.MeshLambertMaterial({ color: 0xffffff, transparent: true, opacity: 0.6 })
       };
-
-      // Terreno base e grama
       const groundSize = 300;
       const groundThickness = 20;
       const grassThickness = 1;
@@ -231,8 +317,6 @@
       grass.position.y = grassThickness / 2;
       grass.receiveShadow = true;
       scene.add(grass);
-
-      // Penhascos ao redor
       function createCliffSegment(x, y, z, rotY) {
         const cliffHeight = groundThickness;
         const length = 15;
@@ -256,8 +340,6 @@
         createCliffSegment(-halfGround - 5, 0, z, Math.PI / 2);
         createCliffSegment(halfGround + 5, 0, z, Math.PI / 2);
       }
-
-      // Montanhas fixas
       function createMountain(x, z, radius = 30, height = 60) {
         const group = new THREE.Group();
         const coneGeo = new THREE.ConeGeometry(radius, height, 6);
@@ -289,8 +371,6 @@
         { x: 120, z: -50, radius: 32, height: 65 }
       ];
       mountainData.forEach(data => createMountain(data.x, data.z, data.radius, data.height));
-
-      // Rio e cachoeira
       const riverShape = new THREE.Shape();
       const rw = 12;
       const rl = groundSize * 0.8;
@@ -307,8 +387,6 @@
       river.position.y = riverLevel;
       river.receiveShadow = true;
       scene.add(river);
-
-      // Cachoeira (rochas, partículas de água e splash)
       const waterfallHeight = 45;
       const waterfallWidth = rw * 5;
       const waterfallDepth = 25;
@@ -316,7 +394,6 @@
       const waterfallBottomY = riverLevel + 0.5;
       const waterfallLandX = riverStartX + 5;
       const waterfallLandZ = 0;
-      // Rochas do topo
       const sourceRockGroup = new THREE.Group();
       for (let i = 0; i < 100; i++) {
         const rockSize = 3 + Math.random() * 6;
@@ -333,7 +410,6 @@
         sourceRockGroup.add(rockMesh);
       }
       scene.add(sourceRockGroup);
-      // Estrutura da cachoeira
       const structureRockGroup = new THREE.Group();
       for (let i = 0; i < 80; i++) {
         const rockSize = 1.5 + Math.random() * 4;
@@ -354,7 +430,6 @@
         structureRockGroup.add(rockMesh);
       }
       scene.add(structureRockGroup);
-      // Rochas laterais
       const sideRockGroup = new THREE.Group();
       for (let i = 0; i < 40; i++) {
         const rockSize = 2 + Math.random() * 5;
@@ -385,8 +460,6 @@
         sideRockGroup.add(rockMesh);
       }
       scene.add(sideRockGroup);
-
-      // Partículas de água caindo
       const waterParticleGroup = new THREE.Group();
       const waterParticles = [];
       for (let i = 0; i < 400; i++) {
@@ -404,8 +477,6 @@
         waterParticles.push(particleMesh);
       }
       scene.add(waterParticleGroup);
-
-      // Splash estático
       const splashGroup = new THREE.Group();
       for (let i = 0; i < 120; i++) {
         const splashSize = Math.random() * 1.2 + 0.4;
@@ -419,8 +490,6 @@
         splashGroup.add(splashParticle);
       }
       scene.add(splashGroup);
-
-      // Ponte sobre o rio
       const bridge = new THREE.Group();
       const bridgeCrossingX = 0;
       const bridgeWidth = 6;
@@ -447,8 +516,6 @@
       bridge.add(support1, support2);
       bridge.position.set(bridgeCrossingX, 0, 0);
       scene.add(bridge);
-
-      // Árvores e arbustos (evitando áreas fixas)
       function createTree(x, z, scale = 1) {
         const group = new THREE.Group();
         const trunkHeight = 6 * scale;
@@ -458,7 +525,7 @@
         group.add(trunk);
         const canopyHeight = 8 * scale;
         const canopy = new THREE.Mesh(new THREE.ConeGeometry(2 * scale, canopyHeight, 6), materials.leaves);
-        canopy.position.y = trunkHeight + canopyHeight / 2 -1*scale;
+        canopy.position.y = trunkHeight + canopyHeight / 2 - 1 * scale;
         canopy.castShadow = true;
         group.add(canopy);
         group.position.set(x, groundLevel, z);
@@ -467,7 +534,7 @@
       const treeAvoidZones = [
         { x: waterfallLandX, z: waterfallLandZ, width: waterfallWidth + 27, depth: waterfallDepth + 47, type: 'rect' },
         { x: bridgeCrossingX, z: 0, width: bridgeWidth + 4, depth: bridgeLength + 4, type: 'rect' },
-        { x: 0, z: 0, width: rl * 1.1, depth: rw * 4, type: 'rect'}
+        { x: 0, z: 0, width: rl * 1.1, depth: rw * 4, type: 'rect' }
       ];
       mountainData.forEach(mt => {
         treeAvoidZones.push({ x: mt.x, z: mt.z, radius: mt.radius * 1.1, type: 'circle' });
@@ -524,95 +591,74 @@
           i--;
         }
       }
-
       // Câmera
-      const camera = new THREE.PerspectiveCamera(70, window.innerWidth/window.innerHeight, 0.1, 1500);
-
-      // --- MULTIPLAYER SOCKET.IO ---
+      camera = new THREE.PerspectiveCamera(70, window.innerWidth/window.innerHeight, 0.1, 1500);
+      const listener = new THREE.AudioListener();
+      camera.add(listener);
+      const waterfallSound = new THREE.Audio(listener);
+      const audioLoader = new THREE.AudioLoader();
+      audioLoader.load('https://cdn.pixabay.com/audio/2024/11/04/audio_98973ef347.mp3', function(buffer) {
+          waterfallSound.setBuffer(buffer);
+          waterfallSound.setLoop(true);
+          waterfallSound.setVolume(100);
+      });
+      const backgroundSound = new THREE.Audio(listener);
+      audioLoader.load('https://cdn.pixabay.com/download/audio/2021/08/09/audio_6b294070f5.mp3', function(buffer) {
+          backgroundSound.setBuffer(buffer);
+          backgroundSound.setLoop(true);
+          backgroundSound.setVolume(8);
+          backgroundSound.play();
+      });
       const socket = io();
-
-      // --- PLAYER MULTIPLAYER ---
       function createPlayerObject(color = 0xf0c837) {
         const group = new THREE.Group();
-        const body = new THREE.Mesh(
-          new THREE.SphereGeometry(1.1, 16, 14),
-          new THREE.MeshPhongMaterial({color: color, shininess:44})
-        ); group.add(body);
-        const aura = new THREE.Mesh(
-          new THREE.SphereGeometry(1.5, 16, 14),
-          new THREE.MeshPhysicalMaterial({
-            color: 0x6d38e6, transparent: true, opacity: 0.20, transmission:0.36, roughness:0.7
-          })
-        ); group.add(aura);
-        const jewel = new THREE.Mesh(
-          new THREE.SphereGeometry(0.32, 12, 10),
-          new THREE.MeshPhongMaterial({color:0xf9c6f0, shininess:90})
-        ); jewel.position.set(0,1.25,0); group.add(jewel);
+        const body = new THREE.Mesh(new THREE.SphereGeometry(1.1, 16, 14), new THREE.MeshPhongMaterial({color: color, shininess:44}));
+        group.add(body);
+        const aura = new THREE.Mesh(new THREE.SphereGeometry(1.5, 16, 14), new THREE.MeshPhysicalMaterial({
+          color: 0x6d38e6, transparent: true, opacity: 0.20, transmission:0.36, roughness:0.7
+        }));
+        group.add(aura);
+        const jewel = new THREE.Mesh(new THREE.SphereGeometry(0.32, 12, 10), new THREE.MeshPhongMaterial({color:0xf9c6f0, shininess:90}));
+        jewel.position.set(0,1.25,0);
+        group.add(jewel);
         return group;
       }
-
       let playerId = null;
       let players = {};
       const playerObjects = {};
-
-      // Gera spawn e cor para o jogador local
       function getRandomSpawn() {
         let dist = Math.random()*80+40, theta = Math.random()*2*Math.PI;
-        return {x:Math.cos(theta)*dist,y:0,z:Math.sin(theta)*dist};
+        return {x:Math.cos(theta)*dist, y:0, z:Math.sin(theta)*dist};
       }
       function randomColor() {
         let arr = [0xe1caff, 0x388ad2, 0xffe04b, 0xea469a, 0x45dbbf, 0xe4ab62, 0xbd8cfc];
         return arr[Math.floor(Math.random()*arr.length)];
       }
-
-      // Estado do jogador local
-      let myState = {
-        pos: getRandomSpawn(),
-        rotY: 0,
-        color: randomColor(),
-        name: playerName,
-        id: null,
-        obj: null
-      };
-
-      // Envia dados do jogador local ao servidor
+      let myState = { pos: getRandomSpawn(), rotY: 0, color: randomColor(), name: playerName, id: null, obj: null };
       function joinServer() {
-        socket.emit('join', {
-          name: myState.name,
-          pos: myState.pos,
-          rotY: myState.rotY,
-          color: myState.color
-        });
+        socket.emit('join', { name: myState.name, pos: myState.pos, rotY: myState.rotY, color: myState.color });
       }
-
-      // Atualiza todos os jogadores recebidos do servidor
       socket.on('players', (serverPlayers) => {
-        // Adiciona/atualiza/remover jogadores
         for (const id in serverPlayers) {
           if (!players[id]) {
-            // Novo player
             players[id] = serverPlayers[id];
             const obj = createPlayerObject(serverPlayers[id].color);
             scene.add(obj);
             playerObjects[id] = obj;
           }
-          // Atualiza dados
           players[id].pos = serverPlayers[id].pos;
           players[id].rotY = serverPlayers[id].rotY;
           players[id].name = serverPlayers[id].name;
           players[id].color = serverPlayers[id].color;
         }
-        // Remove players que saíram
         for (const id in playerObjects) {
-          if (!serverPlayers[id]) {
+          if (!serverPlayers[id] && id !== "Oráculo") {
             scene.remove(playerObjects[id]);
             delete playerObjects[id];
             delete players[id];
           }
         }
       });
-
-      // Descobre meu id
       socket.on('connect', () => {
         playerId = socket.id;
         myState.id = playerId;
@@ -622,34 +668,32 @@
           playerObjects[playerId] = myState.obj;
         }
         joinServer();
+        if (!players["Oráculo"]) {
+          makeNPC();
+        }
       });
-
-      // CONTROLES E MOVIMENTO
       let move = {forward:0, back:0, left:0, right:0};
       let cameraMode = "third";
-      document.getElementById('toggle-view').onclick = ()=>{
+      document.getElementById('toggle-view').onclick = () => {
         cameraMode = cameraMode==='third' ? 'first' : 'third';
         document.getElementById('toggle-view').innerText = cameraMode==='third' ? 'Camera: 1ª Pessoa' : 'Camera: 3ª Pessoa';
       };
-      document.addEventListener('keydown', e=>{
+      document.addEventListener('keydown', e => {
         if(document.activeElement.id === "chat-input") return;
         if(e.key==='w') move.forward=1;
         if(e.key==='s') move.back=1;
         if(e.key==='a') move.left=1;
         if(e.key==='d') move.right=1;
       });
-      document.addEventListener('keyup', e=>{
+      document.addEventListener('keyup', e => {
         if(e.key==='w') move.forward=0;
         if(e.key==='s') move.back=0;
         if(e.key==='a') move.left=0;
         if(e.key==='d') move.right=0;
       });
-
-      // --- MOUSELOOK PARA 1ª PESSOA ---
       let pointerLocked = false;
       let mouseSensitivity = 0.002;
-      let pitch = 0; // ângulo vertical da câmera
-      // Ativa pointer lock ao entrar em 1ª pessoa
+      let pitch = 0;
       function enablePointerLock() {
         const canvas = renderer.domElement;
         if (!pointerLocked) {
@@ -661,22 +705,18 @@
         document.exitPointerLock = document.exitPointerLock || document.mozExitPointerLock;
         if (document.exitPointerLock) document.exitPointerLock();
       }
-      // Alterna pointer lock ao trocar de modo de câmera
-      document.getElementById('toggle-view').addEventListener('click', ()=>{
+      document.getElementById('toggle-view').addEventListener('click', () => {
         if(cameraMode==='first') enablePointerLock();
         else disablePointerLock();
       });
-      // Ativa pointer lock automaticamente ao entrar em 1ª pessoa
       function checkPointerLock() {
         if(cameraMode==='first' && !pointerLocked) enablePointerLock();
       }
-      // Eventos pointer lock
       document.addEventListener('pointerlockchange', onPointerLockChange, false);
       document.addEventListener('mozpointerlockchange', onPointerLockChange, false);
       function onPointerLockChange() {
         pointerLocked = (document.pointerLockElement === renderer.domElement || document.mozPointerLockElement === renderer.domElement);
       }
-      // Movimento do mouse para rotacionar a câmera em 1ª pessoa
       renderer.domElement.addEventListener('mousemove', function(e){
         if(cameraMode==='first' && pointerLocked) {
           myState.rotY -= e.movementX * mouseSensitivity;
@@ -684,9 +724,8 @@
           pitch = Math.max(-Math.PI/2, Math.min(Math.PI/2, pitch));
         }
       });
-
       function updatePlayer(dt) {
-        let dx = move.right-move.left, dz = move.forward-move.back;
+        let dx = move.right - move.left, dz = move.forward - move.back;
         if(cameraMode==='third') {
           myState.rotY -= dx * 2 * dt;
           if (dz) {
@@ -694,74 +733,120 @@
             myState.pos.z += Math.cos(myState.rotY)*dz*6*dt;
           }
         } else {
-          let ang = myState.rotY, forward=dz!==0, strafe=dx!==0;
-          if(forward||strafe){
+          let ang = myState.rotY;
+          if(dx || dz){
             let moveAng = Math.atan2(dx, Math.abs(dz));
             ang -= moveAng;
             myState.pos.x -= Math.sin(ang)*Math.sign(dz)*6*dt;
             myState.pos.z -= Math.cos(ang)*Math.sign(dz)*6*dt;
           }
         }
-        // Limite do terreno
-        let rad = Math.sqrt(myState.pos.x**2+myState.pos.z**2);
-        if(rad>groundSize/2-5){myState.pos.x*=(groundSize/2-5)/rad;myState.pos.z*=(groundSize/2-5)/rad;}
+        let rad = Math.sqrt(myState.pos.x ** 2 + myState.pos.z ** 2);
+        if(rad > groundSize / 2 - 5) {
+          myState.pos.x *= (groundSize / 2 - 5) / rad;
+          myState.pos.z *= (groundSize / 2 - 5) / rad;
+        }
       }
-
-      // Envia movimento para o servidor periodicamente
       setInterval(() => {
         if (playerId) {
-          socket.emit('move', {
-            pos: myState.pos,
-            rotY: myState.rotY
-          });
+          socket.emit('move', { pos: myState.pos, rotY: myState.rotY });
         }
       }, 40);
-
-      // ANIMAÇÃO E CÂMERA
       function updateCamera() {
         let pos = myState.pos;
         if(cameraMode==='third') {
-          let camDist=18, camHeight=8, rotY=myState.rotY+Math.PI;
-          camera.position.set(pos.x+Math.sin(rotY)*camDist,pos.y+camHeight,pos.z+Math.cos(rotY)*camDist);
-          camera.lookAt(pos.x, pos.y+2.5, pos.z);
+          let camDist = 18, camHeight = 8, rotY = myState.rotY + Math.PI;
+          camera.position.set(pos.x + Math.sin(rotY) * camDist, pos.y + camHeight, pos.z + Math.cos(rotY) * camDist);
+          camera.lookAt(pos.x, pos.y + 2.5, pos.z);
         } else {
-          camera.position.set(pos.x, pos.y+2.5, pos.z);
-          camera.rotation.set(0, 0, 0);
+          camera.position.set(pos.x, pos.y + 2.5, pos.z);
+          camera.rotation.set(0,0,0);
           camera.rotateY(myState.rotY);
           camera.rotateX(pitch);
         }
       }
-
-      // CHAT MULTIPLAYER
+      // --- CHAT MULTIPLAYER com integração IA ---
       const chatInput = document.getElementById("chat-input");
       const chatForm = document.getElementById("chat-form");
       const messagesDiv = document.getElementById("messages");
-      const bubbleLabels = {};
+      const GROQ_API_KEY = "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";
+      const GROQ_ENDPOINT = "https://api.groq.com/openai/v1/chat/completions";
       function appendMessage(nome, msg) {
-        let div=document.createElement('div');
+        let div = document.createElement('div');
         div.innerHTML = `<b style="color:#8ae5ff;">${escapeHtml(nome)}</b>: <span>${escapeHtml(msg)}</span>`;
         messagesDiv.appendChild(div);
         messagesDiv.scrollTop = messagesDiv.scrollHeight;
       }
-      chatForm.onsubmit = e=>{
+      chatForm.onsubmit = async e => {
         e.preventDefault();
-        let msg=chatInput.value.trim();
-        if(msg.length>0){
-          socket.emit('chat', msg);
+        let msg = chatInput.value.trim();
+        if(msg.length === 0) return;
+        if(msg.charAt(0) === '!'){
+          let query = msg.slice(1).trim();
           appendMessage(playerName, msg);
-          showBubble(playerId, msg);
+          chatInput.value = '';
+          setTimeout(() => { npcSay(players["Oráculo"], query); }, 600);
+          return;
         }
-        chatInput.value='';
+        if(msg.charAt(0) === '@'){
+          let promptMsg = msg.slice(1).trim();
+          appendMessage(playerName, msg);
+          chatInput.value = '';
+          let tempDiv = document.createElement('div');
+          tempDiv.innerHTML = `<b style="color:#8ae5ff;">IA</b>: <span>...</span>`;
+          messagesDiv.appendChild(tempDiv);
+          messagesDiv.scrollTop = messagesDiv.scrollHeight;
+          try {
+            const response = await fetch(GROQ_ENDPOINT, {
+              method: "POST",
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${GROQ_API_KEY}`
+              },
+              body: JSON.stringify({
+                model: "llama-3.3-70b-versatile",
+                messages: [
+                  { role: "system", content: "Você é um assistente que responde exclusivamente em português. Limite sua resposta a 500 caracteres" },
+                  { role: "user", content: promptMsg }
+                ],
+                temperature: 0.5,
+                max_tokens: 200,
+                top_p: 1,
+                stream: false,
+                stop: null
+              })
+            });
+            if(!response.ok) throw new Error(`Erro HTTP: ${response.status}`);
+            const data = await response.json();
+            if(data && data.choices && data.choices.length > 0){
+              tempDiv.innerHTML = `<b style="color:#8ae5ff;">IA</b>: <span>${data.choices[0].message.content}</span>`;
+            } else {
+              tempDiv.innerHTML = `<b style="color:#8ae5ff;">IA</b>: <span>Erro na resposta da IA.</span>`;
+            }
+          } catch (error) {
+            console.error("Erro ao conectar com a API Groq:", error);
+            tempDiv.innerHTML = `<b style="color:#8ae5ff;">IA</b>: <span>Erro ao conectar com a API.</span>`;
+          }
+        } else {
+          socket.emit('chat', msg);
+          showBubble(playerId, msg);
+          appendMessage(playerName, msg);
+          chatInput.value = '';
+        }
       };
-
       socket.on('chat', data => {
         if (data.id !== playerId) {
           appendMessage(data.name, data.msg);
           showBubble(data.id, data.msg);
         }
       });
-
-      // Bubbles
+      function escapeHtml(str) {
+        return str.replace(/[&<>"'\/]/g, s=>{
+          const map = {"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;","/":"&#x2F;"};
+          return map[s];
+        });
+      }
+      const bubbleLabels = {};
       function showBubble(id, text) {
         removeBubble(id);
         let el = document.createElement('div');
@@ -781,40 +866,35 @@
       function updateBubbles() {
         for(const id in bubbleLabels) {
           if(playerObjects[id]) {
-            let pos=playerObjects[id].position.clone();
-            pos.y+=2.6;
-            let vector=pos.project(camera);
-            let x = (vector.x*0.5+0.5) * window.innerWidth;
-            let y = (-vector.y*0.5+0.5) * window.innerHeight;
+            let pos = playerObjects[id].position.clone();
+            pos.y += 2.6;
+            let vector = pos.project(camera);
+            let x = (vector.x * 0.5 + 0.5) * window.innerWidth;
+            let y = (-vector.y * 0.5 + 0.5) * window.innerHeight;
             let el = bubbleLabels[id].el;
-            el.style.left = `${x-el.offsetWidth/2}px`;
-            el.style.top = `${y-36}px`;
+            el.style.left = `${x - el.offsetWidth/2}px`;
+            el.style.top = `${y - 36}px`;
           }
         }
       }
-
       // --- MINIMAPA ---
       let minimapCanvas, minimapCtx, minimapVisible = true;
       let minimapContainer, minimapToggleBtn;
-      let minimapScale = 0.65; // pixels per unit
-      let minimapSize = 220; // canvas size
+      let minimapScale = 0.65;
+      let minimapSize = 220;
       let minimapPadding = 10;
       let minimapCenter = minimapSize / 2;
       let minimapDragging = false, minimapDragOffset = {x:0, y:0};
-
       function setupMinimap() {
         minimapContainer = document.getElementById('minimap-container');
         minimapToggleBtn = document.getElementById('minimap-toggle');
         minimapCanvas = document.getElementById('minimap');
         minimapCtx = minimapCanvas.getContext('2d');
-
         minimapToggleBtn.onclick = function() {
           minimapContainer.classList.toggle('minimized');
           minimapVisible = !minimapContainer.classList.contains('minimized');
           minimapToggleBtn.innerText = minimapVisible ? '–' : '+';
         };
-
-        // Arrastar minimapa
         let header = document.getElementById('minimap-header');
         header.addEventListener('mousedown', function(e) {
           minimapDragging = true;
@@ -833,27 +913,18 @@
           document.body.style.userSelect = "";
         });
       }
-
-      // Desenha elementos do cenário no minimapa
       function drawMinimap() {
         if (!minimapVisible) return;
         minimapCtx.clearRect(0, 0, minimapSize, minimapSize);
-
-        // Fundo
         minimapCtx.fillStyle = "#181a28";
         minimapCtx.fillRect(0, 0, minimapSize, minimapSize);
-
-        // Terreno
         minimapCtx.strokeStyle = "#3a4a3a";
         minimapCtx.lineWidth = 2.5;
         minimapCtx.beginPath();
-        minimapCtx.arc(minimapCenter, minimapCenter, groundSize/2*minimapScale, 0, 2*Math.PI);
+        minimapCtx.arc(minimapCenter, minimapCenter, groundSize/2 * minimapScale, 0, 2*Math.PI);
         minimapCtx.stroke();
-
-        // Rio
         minimapCtx.save();
         minimapCtx.translate(minimapCenter, minimapCenter);
-        minimapCtx.rotate(0);
         minimapCtx.beginPath();
         minimapCtx.moveTo((riverStartX)*minimapScale, (riverStartY)*minimapScale);
         minimapCtx.bezierCurveTo(
@@ -871,16 +942,9 @@
         minimapCtx.fillStyle = "#4fc3f7bb";
         minimapCtx.fill();
         minimapCtx.restore();
-
-        // Montanhas
         mountainData.forEach(mt => {
           minimapCtx.beginPath();
-          minimapCtx.arc(
-            minimapCenter + mt.x*minimapScale,
-            minimapCenter + mt.z*minimapScale,
-            mt.radius*minimapScale,
-            0, 2*Math.PI
-          );
+          minimapCtx.arc(minimapCenter + mt.x * minimapScale, minimapCenter + mt.z * minimapScale, mt.radius * minimapScale, 0, 2*Math.PI);
           minimapCtx.fillStyle = "#bdbdbd";
           minimapCtx.globalAlpha = 0.7;
           minimapCtx.fill();
@@ -889,39 +953,22 @@
           minimapCtx.lineWidth = 1.2;
           minimapCtx.stroke();
         });
-
-        // Ponte
         minimapCtx.save();
-        minimapCtx.translate(minimapCenter + bridgeCrossingX*minimapScale, minimapCenter);
-        minimapCtx.rotate(0);
+        minimapCtx.translate(minimapCenter + bridgeCrossingX * minimapScale, minimapCenter);
         minimapCtx.fillStyle = "#a1887f";
-        minimapCtx.fillRect(
-          -bridgeWidth/2*minimapScale,
-          -bridgeLength/2*minimapScale,
-          bridgeWidth*minimapScale,
-          bridgeLength*minimapScale
-        );
+        minimapCtx.fillRect(-bridgeWidth/2 * minimapScale, -bridgeLength/2 * minimapScale, bridgeWidth * minimapScale, bridgeLength * minimapScale);
         minimapCtx.restore();
-
-        // Cachoeira (área)
         minimapCtx.save();
         minimapCtx.globalAlpha = 0.5;
         minimapCtx.fillStyle = "#6ab3f7";
-        minimapCtx.fillRect(
-          minimapCenter + (waterfallLandX - waterfallWidth/2)*minimapScale,
-          minimapCenter + (waterfallLandZ - waterfallDepth/2)*minimapScale,
-          waterfallWidth*minimapScale,
-          waterfallDepth*minimapScale
-        );
+        minimapCtx.fillRect(minimapCenter + (waterfallLandX - waterfallWidth/2)*minimapScale, minimapCenter + (waterfallLandZ - waterfallDepth/2)*minimapScale, waterfallWidth*minimapScale, waterfallDepth*minimapScale);
         minimapCtx.globalAlpha = 1;
         minimapCtx.restore();
-
-        // Jogadores
         for (const id in players) {
           const p = players[id];
           let isMe = (id === playerId);
-          let px = minimapCenter + p.pos.x*minimapScale;
-          let pz = minimapCenter + p.pos.z*minimapScale;
+          let px = minimapCenter + p.pos.x * minimapScale;
+          let pz = minimapCenter + p.pos.z * minimapScale;
           minimapCtx.beginPath();
           minimapCtx.arc(px, pz, isMe ? 8 : 6, 0, 2*Math.PI);
           minimapCtx.fillStyle = isMe ? "#ffe04b" : "#6d38e6";
@@ -931,31 +978,119 @@
           minimapCtx.strokeStyle = "#fff";
           minimapCtx.lineWidth = isMe ? 2.2 : 1.2;
           minimapCtx.stroke();
-
-          // Nome
           minimapCtx.font = "bold 13px Segoe UI, Arial";
           minimapCtx.fillStyle = "#fff";
           minimapCtx.textAlign = "center";
           minimapCtx.fillText(p.name, px, pz - 12);
         }
       }
-
-      // Atualiza minimapa a cada frame
       function updateMinimap() {
         if (typeof drawMinimap === "function") drawMinimap();
         requestAnimationFrame(updateMinimap);
       }
-
-      // --- FIM MINIMAPA ---
-
-      // ANIMAÇÃO PRINCIPAL
+      // --- INTEGRAÇÃO DA LÓGICA DO NPC e BOTS ---
+      const frases = [
+        "Sinto a energia da esfera...",
+        "Você já tocou nas árvores mágicas?",
+        "A esfera sussurra em silêncio.",
+        "✨",
+        "Um vento etéreo...",
+        "Aqui é seguro?",
+        "O mistério está em toda parte.",
+        "Incrível o céu daqui!",
+        "Qual seu nome?",
+        "Sinta-se com sorte!",
+        "Que luz azul..."
+      ];
+      async function npcSay(npc, userMsg) {
+        let msg;
+        if(userMsg) {
+          try {
+            const response = await fetch(GROQ_ENDPOINT, {
+              method: "POST",
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${GROQ_API_KEY}`
+              },
+              body: JSON.stringify({
+                model: "llama-3.3-70b-versatile",
+                messages: [
+                  { role: "system", content: "Você é um assistente que responde exclusivamente em português. Limite sua resposta a 500 caracteres" },
+                  { role: "user", content: userMsg }
+                ],
+                temperature: 0.5,
+                max_tokens: 200,
+                top_p: 1,
+                stream: false,
+                stop: null
+              })
+            });
+            if(response.ok) {
+              const data = await response.json();
+              msg = data.choices[0].message.content.trim();
+            } else {
+              msg = "Desculpe, não consigo acessar o oráculo no momento.";
+            }
+          } catch (e) {
+            console.error(e);
+            msg = "Erro ao consultar o oráculo.";
+          }
+        } else {
+          msg = frases[Math.floor(Math.random()*frases.length)];
+        }
+        appendMessage(npc.name, msg);
+        showBubble(npc.name, msg);
+      }
+      function botSay(bot, userMsg) {
+        if(bot.name === "Oráculo") {
+          setTimeout(() => { npcSay(bot, userMsg || null); }, 600 + Math.random()*1500);
+        } else {
+          let msg = userMsg || frases[Math.floor(Math.random()*frases.length)];
+          appendMessage(bot.name, msg);
+          showBubble(bot.name, msg);
+        }
+      }
+      function moveBots(dt) {
+        for(const id in players) {
+          let p = players[id];
+          if(!p.bot) continue;
+          let dx = p.target.x - p.pos.x, dz = p.target.z - p.pos.z;
+          let dist = Math.sqrt(dx*dx+dz*dz);
+          if(dist < 1.4){
+            p.target = getRandomSpawn();
+            if(p.name === "Oráculo") {
+              if(Math.random()<0.5) botSay(p, "Qual é a sua dúvida?");
+            } else {
+              if(Math.random()<0.5) botSay(p);
+            }
+          }
+          let step = 2.8*dt;
+          p.rotY = Math.atan2(dx, dz);
+          p.pos.x += Math.sign(dx)*Math.min(step, Math.abs(dx));
+          p.pos.z += Math.sign(dz)*Math.min(step, Math.abs(dz));
+          let obj = playerObjects[p.id] || playerObjects[p.name];
+          if(obj) {
+            obj.position.set(p.pos.x, 1, p.pos.z);
+            obj.rotation.y = p.rotY;
+          }
+        }
+      }
+      function makeNPC() {
+        let pos = getRandomSpawn();
+        let color = randomColor();
+        let rotY = Math.random()*Math.PI*2;
+        let name = "Oráculo";
+        let npc = { id: name, bot: true, name: name, pos: pos, target: getRandomSpawn(), color: color, rotY: rotY, obj: createPlayerObject(color) };
+        scene.add(npc.obj);
+        players[name] = npc;
+        playerObjects[name] = npc.obj;
+        return npc;
+      }
       let lastTime = performance.now();
       function animate() {
         requestAnimationFrame(animate);
         let now = performance.now(), dt = (now - lastTime) * 0.001;
         lastTime = now;
-
-        // Anima partículas de água da cachoeira
         waterParticles.forEach(particle => {
           particle.position.y -= 55.0 * dt;
           if (particle.position.y < waterfallBottomY) {
@@ -964,46 +1099,74 @@
             particle.position.z = waterfallLandZ + (Math.random() - 0.5) * waterfallDepth;
           }
         });
-
         updatePlayer(dt);
-
-        // Atualiza posição e rotação de todos players
+        moveBots(dt);
         for (const id in players) {
-          const p = players[id];
-          if (playerObjects[id]) {
+          let p = players[id];
+          if (playerObjects[id] && !p.human) {
             playerObjects[id].position.set(p.pos.x, 1, p.pos.z);
             playerObjects[id].rotation.y = p.rotY || 0;
           }
         }
         updateCamera();
         updateBubbles();
+        const elapsed = clock.getElapsedTime();
+        updateDayNightCycle(elapsed);
+        beeArray.forEach(b => b.update(elapsed));
         renderer.render(scene, camera);
-
-        // Checa pointer lock se necessário
         checkPointerLock();
+        updateBeeInfoBox();
+        const coordsEl = document.getElementById('minimap-coords');
+        if(coordsEl) {
+          coordsEl.textContent = `X: ${myState.pos.x.toFixed(1)}  Z: ${myState.pos.z.toFixed(1)}`;
+        }
+        const targetPos = new THREE.Vector2(-110, -5.5);
+        const playerPos = new THREE.Vector2(myState.pos.x, myState.pos.z);
+        const distance = playerPos.distanceTo(targetPos);
+        const radius = 100;
+        if(distance < radius) {
+          const volume = (distance / radius) - 1;
+          waterfallSound.setVolume(volume);
+          if(!waterfallSound.isPlaying) waterfallSound.play();
+        } else {
+          if(waterfallSound.isPlaying) waterfallSound.stop();
+        }
       }
       animate();
-
-      // RESIZE
-      window.addEventListener('resize', ()=>{
+      window.addEventListener('resize', () => {
         camera.aspect = window.innerWidth / window.innerHeight;
         camera.updateProjectionMatrix();
         renderer.setSize(window.innerWidth, window.innerHeight);
       });
-
-      // Utilidades
       function escapeHtml(str) {
         return str.replace(/[&<>"'\/]/g, s=>{
           const map = {"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;","/":"&#x2F;"};
           return map[s];
         });
       }
-
-      // Inicializa minimapa
       setupMinimap();
       updateMinimap();
+      function updateBeeInfoBox() {
+        let closestBeeDist = Infinity, closestBee = null;
+        beeArray.forEach(bee => {
+          let d = new THREE.Vector3(myState.pos.x, 0, myState.pos.z).distanceTo(new THREE.Vector3(bee.center.x, 0, bee.center.z));
+          if(d < 15 && d < closestBeeDist) {
+            closestBeeDist = d;
+            closestBee = bee;
+          }
+        });
+        if(closestBee) {
+          const beeScreenPos = closestBee.mesh.position.clone().project(camera);
+          const x = (beeScreenPos.x * 0.5 + 0.5) * window.innerWidth;
+          const y = (-beeScreenPos.y * 0.5 + 0.5) * window.innerHeight;
+          beeInfoBox.style.left = (x - beeInfoBox.offsetWidth/2) + "px";
+          beeInfoBox.style.top = (y - beeInfoBox.offsetHeight - 20) + "px";
+          beeInfoBox.style.display = "block";
+        } else {
+          beeInfoBox.style.display = "none";
+        }
+      }
     }
-    // Não inicia o jogo até o email ser informado
   </script>
 </body>
 </html>
