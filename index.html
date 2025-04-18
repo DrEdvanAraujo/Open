@@ -609,7 +609,7 @@
           backgroundSound.setVolume(8);
           backgroundSound.play();
       });
-      const socket = io();
+      const socket = io('https://open-ctwz.onrender.com');
       function createPlayerObject(color = 0xf0c837) {
         const group = new THREE.Group();
         const body = new THREE.Mesh(new THREE.SphereGeometry(1.1, 16, 14), new THREE.MeshPhongMaterial({color: color, shininess:44}));
