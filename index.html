@@ -651,6 +651,15 @@
           players[id].name = serverPlayers[id].name;
           players[id].color = serverPlayers[id].color;
         }
+if (playerObjects[id]) {
+      playerObjects[id].position.set(
+        serverPlayers[id].pos.x,
+        1,
+        serverPlayers[id].pos.z
+      );
+      playerObjects[id].rotation.y = serverPlayers[id].rotY || 0;
+    }
+  }
         for (const id in playerObjects) {
           if (!serverPlayers[id] && id !== "Oráculo") {
             scene.remove(playerObjects[id]);
