@@ -198,9 +198,6 @@
       }
     });
 
-    // REMOVIDO: Todo código relacionado a placas foi eliminado.
-    // (Variáveis, funções para abrir/fechar modal, criação e remoção manual de placas)
-
     // =========  BEE PORTAL  =====================================
     class BeePortal {
       constructor(scene, startPos, phaseShift = 0) {
@@ -609,36 +606,26 @@
           backgroundSound.setVolume(8);
           backgroundSound.play();
       });
+      // --- SOCKET.IO ---
       const socket = io('https://open-ctwz.onrender.com');
-      function createPlayerObject(color = 0xf0c837) {
-        const group = new THREE.Group();
-        const body = new THREE.Mesh(new THREE.SphereGeometry(1.1, 16, 14), new THREE.MeshPhongMaterial({color: color, shininess:44}));
-        group.add(body);
-        const aura = new THREE.Mesh(new THREE.SphereGeometry(1.5, 16, 14), new THREE.MeshPhysicalMaterial({
-          color: 0x6d38e6, transparent: true, opacity: 0.20, transmission:0.36, roughness:0.7
-        }));
-        group.add(aura);
-        const jewel = new THREE.Mesh(new THREE.SphereGeometry(0.32, 12, 10), new THREE.MeshPhongMaterial({color:0xf9c6f0, shininess:90}));
-        jewel.position.set(0,1.25,0);
-        group.add(jewel);
-        return group;
-      }
-      let playerId = null;
-      let players = {};
-      const playerObjects = {};
-      function getRandomSpawn() {
-        let dist = Math.random()*80+40, theta = Math.random()*2*Math.PI;
-        return {x:Math.cos(theta)*dist, y:0, z:Math.sin(theta)*dist};
-      }
-      function randomColor() {
-        let arr = [0xe1caff, 0x388ad2, 0xffe04b, 0xea469a, 0x45dbbf, 0xe4ab62, 0xbd8cfc];
-        return arr[Math.floor(Math.random()*arr.length)];
-      }
-      let myState = { pos: getRandomSpawn(), rotY: 0, color: randomColor(), name: playerName, id: null, obj: null };
-      function joinServer() {
-        socket.emit('join', { name: myState.name, pos: myState.pos, rotY: myState.rotY, color: myState.color });
-      }
+      
+      // Debug logging for socket events
+      socket.on('connect', () => {
+        console.log('Connected to server with socket id:', socket.id);
+        playerId = socket.id;
+        myState.id = playerId;
+        if (!myState.obj) {
+          myState.obj = createPlayerObject(myState.color);
+          scene.add(myState.obj);
+          playerObjects[playerId] = myState.obj;
+        }
+        joinServer();
+        if (!players["Oráculo"]) {
+          makeNPC();
+        }
+      });
       socket.on('players', (serverPlayers) => {
+        console.log('Received players update:', serverPlayers);
         for (const id in serverPlayers) {
           if (!players[id]) {
             players[id] = serverPlayers[id];
@@ -659,19 +646,45 @@
           }
         }
       });
-      socket.on('connect', () => {
-        playerId = socket.id;
-        myState.id = playerId;
-        if (!myState.obj) {
-          myState.obj = createPlayerObject(myState.color);
-          scene.add(myState.obj);
-          playerObjects[playerId] = myState.obj;
-        }
-        joinServer();
-        if (!players["Oráculo"]) {
-          makeNPC();
+      socket.on('chat', data => {
+        console.log('Received chat event:', data);
+        if (data.id !== playerId) {
+          appendMessage(data.name, data.msg);
+          showBubble(data.id, data.msg);
         }
       });
+
+      function createPlayerObject(color = 0xf0c837) {
+        const group = new THREE.Group();
+        const body = new THREE.Mesh(new THREE.SphereGeometry(1.1, 16, 14), new THREE.MeshPhongMaterial({color: color, shininess:44}));
+        group.add(body);
+        const aura = new THREE.Mesh(new THREE.SphereGeometry(1.5, 16, 14), new THREE.MeshPhysicalMaterial({
+          color: 0x6d38e6, transparent: true, opacity: 0.20, transmission:0.36, roughness:0.7
+        }));
+        group.add(aura);
+        const jewel = new THREE.Mesh(new THREE.SphereGeometry(0.32, 12, 10), new THREE.MeshPhongMaterial({color:0xf9c6f0, shininess:90}));
+        jewel.position.set(0,1.25,0);
+        group.add(jewel);
+        return group;
+      }
+      
+      let playerId = null;
+      let players = {};
+      const playerObjects = {};
+      function getRandomSpawn() {
+        let dist = Math.random()*80+40, theta = Math.random()*2*Math.PI;
+        return {x:Math.cos(theta)*dist, y:0, z:Math.sin(theta)*dist};
+      }
+      function randomColor() {
+        let arr = [0xe1caff, 0x388ad2, 0xffe04b, 0xea469a, 0x45dbbf, 0xe4ab62, 0xbd8cfc];
+        return arr[Math.floor(Math.random()*arr.length)];
+      }
+      let myState = { pos: getRandomSpawn(), rotY: 0, color: randomColor(), name: playerName, id: null, obj: null };
+      function joinServer() {
+        console.log('Emitting join event:', { name: myState.name, pos: myState.pos, rotY: myState.rotY, color: myState.color });
+        socket.emit('join', { name: myState.name, pos: myState.pos, rotY: myState.rotY, color: myState.color });
+      }
+      
       let move = {forward:0, back:0, left:0, right:0};
       let cameraMode = "third";
       document.getElementById('toggle-view').onclick = () => {
@@ -750,6 +763,7 @@
       setInterval(() => {
         if (playerId) {
           socket.emit('move', { pos: myState.pos, rotY: myState.rotY });
+          console.log('Emitting move event:', { pos: myState.pos, rotY: myState.rotY });
         }
       }, 40);
       function updateCamera() {
@@ -834,12 +848,6 @@
           chatInput.value = '';
         }
       };
-      socket.on('chat', data => {
-        if (data.id !== playerId) {
-          appendMessage(data.name, data.msg);
-          showBubble(data.id, data.msg);
-        }
-      });
       function escapeHtml(str) {
         return str.replace(/[&<>"'\/]/g, s=>{
           const map = {"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;","/":"&#x2F;"};
@@ -1138,14 +1146,6 @@
         camera.updateProjectionMatrix();
         renderer.setSize(window.innerWidth, window.innerHeight);
       });
-      function escapeHtml(str) {
-        return str.replace(/[&<>"'\/]/g, s=>{
-          const map = {"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;","/":"&#x2F;"};
-          return map[s];
-        });
-      }
-      setupMinimap();
-      updateMinimap();
       function updateBeeInfoBox() {
         let closestBeeDist = Infinity, closestBee = null;
         beeArray.forEach(bee => {
@@ -1166,6 +1166,8 @@
           beeInfoBox.style.display = "none";
         }
       }
+      setupMinimap();
+      updateMinimap();
     }
   </script>
 </body>
