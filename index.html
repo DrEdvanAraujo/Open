@@ -236,9 +236,120 @@
       }
     }
     // =========  /BEE PORTAL  ===================================
+    // NEW FUNCTION TO SETUP IMAGE PLACEMENT
+function setupImagePlacer() {
+    // Create hidden file input element
+    imagePlaneInput = document.createElement('input');
+    imagePlaneInput.type = 'file';
+    imagePlaneInput.accept = 'image/*'; // Only accept image files
+    imagePlaneInput.style.display = 'none'; // Keep it hidden
+    imagePlaneInput.addEventListener('change', handleImageFileSelect); // Add listener for when a file is chosen
+    document.body.appendChild(imagePlaneInput); // Add it to the document
 
+    // Add keyboard listener for the 'G' key
+    document.addEventListener('keydown', (e) => {
+        // Ignore if the user is typing in the chat input
+        if (document.activeElement.id === "chat-input") return;
+
+        // Check if 'G' key was pressed
+        if (e.key === 'g' || e.key === 'G') {
+            console.log("'G' key pressed, triggering file input.");
+            imagePlaneInput.click(); // Programmatically click the hidden input
+        }
+    });
+}
+
+// NEW FUNCTION TO HANDLE THE SELECTED IMAGE FILE
+function handleImageFileSelect(event) {
+    const file = event.target.files[0];
+
+    // Check if a file was selected and if it's an image
+    if (!file || !file.type.startsWith('image/')) {
+        console.warn("No valid image file selected.");
+        event.target.value = null; // Reset the input value
+        return;
+    }
+
+    console.log(`Image selected: ${file.name}`);
+    const reader = new FileReader();
+
+    // Define what happens when the FileReader finishes loading the file
+    reader.onload = function(e) {
+        console.log("Image file read successfully, loading texture...");
+        const textureLoader = new THREE.TextureLoader();
+
+        // Load the image data (as a data URL) into a Three.js Texture
+        textureLoader.load(
+            e.target.result, // The result of FileReader (data URL)
+            (texture) => { // Success callback
+                console.log("Texture loaded successfully.");
+                // Get image dimensions for aspect ratio
+                const imgWidth = texture.image.width;
+                const imgHeight = texture.image.height;
+                const aspectRatio = imgWidth / imgHeight;
+
+                // Define the size of the plane in the 3D world
+                const planeHeight = 8; // Let's make it reasonably large
+                const planeWidth = planeHeight * aspectRatio;
+
+                console.log(`Creating plane geometry: ${planeWidth.toFixed(1)} x ${planeHeight}`);
+                // Create the geometry (flat surface)
+                const geometry = new THREE.PlaneGeometry(planeWidth, planeHeight);
+
+                // Create the material using the loaded texture
+                const material = new THREE.MeshBasicMaterial({
+                    map: texture,          // Apply the image texture
+                    side: THREE.DoubleSide, // Render both sides of the plane
+                    transparent: true,     // Allow transparency (for PNGs, etc.)
+                    depthTest: true,       // Make sure it interacts with depth properly
+                    depthWrite: true
+                });
+
+                // Create the Mesh (the actual 3D object)
+                const planeMesh = new THREE.Mesh(geometry, material);
+
+                // Get the player's current position (CLONE it!)
+                const playerPos = myState.pos.clone();
+
+                // Set the plane's position to the player's position
+                planeMesh.position.copy(playerPos);
+                // Adjust Y position slightly - center it vertically at player's eye level maybe?
+                planeMesh.position.y = 2.5; // Match player's height approx.
+
+                // Optional: Make the plane face the camera or align with player rotation
+                // Let's make it stand upright and face the direction the player was facing
+                planeMesh.rotation.y = myState.rotY;
+
+                // Add the plane mesh to the main scene
+                scene.add(planeMesh);
+                console.log(`Image plane added to scene at X:${playerPos.x.toFixed(1)}, Y:${planeMesh.position.y.toFixed(1)}, Z:${playerPos.z.toFixed(1)}`);
+
+                // Reset the file input so the same file can be selected again
+                event.target.value = null;
+            },
+            undefined, // onProgress callback (not needed here)
+            (err) => { // Error callback
+                console.error('Error loading image texture:', err);
+                alert("Houve um erro ao carregar a textura da imagem.");
+                event.target.value = null; // Reset the input value
+            }
+        );
+    };
+
+    // Define error handling for the FileReader
+    reader.onerror = function(error) {
+        console.error("FileReader error:", error);
+        alert("Houve um erro ao ler o arquivo de imagem.");
+        event.target.value = null; // Reset the input value
+    };
+
+    // Start reading the selected file as a Data URL
+    reader.readAsDataURL(file);
+}
     let scene, camera;
+    let imagePlaneInput;
     function iniciarJogo() {
+    setupImagePlacer();
       scene = new THREE.Scene();
       scene.background = new THREE.Color(0x10131A);
       /* ---------- ABELHAS NO MAPA ---------- */
